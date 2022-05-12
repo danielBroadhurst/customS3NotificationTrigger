@@ -1,0 +1,64 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  s3-trigger
+
+  Sample SAM Template for s3-trigger
+  
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+
+Resources:
+  LambdaIAMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+      - PolicyName: root
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - 'logs:CreateLogGroup'
+                - 'logs:CreateLogStream'
+                - 'logs:PutLogEvents'
+              Resource: 'arn:aws:logs:*:*:*'
+
+  BucketPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt NotificationFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !ImportValue S3BucketArn
+
+  LambdaTriggerHello:
+    Type: 'Custom::LambdaTrigger'
+    DependsOn: BucketPermission
+    Properties:
+      ServiceToken: !ImportValue AddNotificationLambdaArn
+      LambdaArn: !GetAtt NotificationFunction.Arn
+      Bucket: !ImportValue S3BucketName
+      FilterValue: archive/incoming/wicked/
+      Events: 
+        - "s3:ObjectCreated:*"
+
+  NotificationFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: notification/
+      Role: !GetAtt LambdaIAMRole.Arn
+      Handler: app.lambdaHandler
+      Runtime: nodejs14.x
